@@ -149,6 +149,7 @@ startup_hook() {
   else
      printf '%s\n' "1" >"$connect_file"
      printf '%s\n' "0" >"$counter_file"
+     /root/ns-letsencrypt/ns-copytons.py SetHAPrimaryInConfig
   fi
 }
 

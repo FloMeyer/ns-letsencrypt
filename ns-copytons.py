@@ -3,7 +3,7 @@
 #USE AT OWN RISK
 
 #Imports
-import json, requests, base64, sys, os, re
+import json, requests, fileinput, base64, sys, os, re
 requests.packages.urllib3.disable_warnings()
 #imports variables used for script
 from mynsconfig import *
@@ -217,6 +217,32 @@ def linkSSL(connectiontype,nitroNSIP,authToken, nschainname, nspairname):
    response = requests.post(url, data=payload, headers=headers, verify=False)
    print("Link Netscaler CERTS: %s" % response.reason)
 
+def GetHAStatus(connectiontype,nitroNSIP,authToken):
+   url = '%s://%s/nitro/v1/stat/hanode' % (connectiontype, nitroNSIP)
+   headers = {'Cookie': authToken}
+   response = requests.get(url,headers=headers, verify=False)
+   return response.json()
+
+def GetHAPrimary(connectiontype,nitroNSIP,authToken):
+   url = '%s://%s/nitro/v1/config/hanode' % (connectiontype, nitroNSIP)
+   headers = {'Cookie': authToken}
+   response = requests.get(url,headers=headers, verify=False)
+   r = response.json()
+   hanode = r["hanode"]
+   for node in hanode:
+      if node["state"] == "Primary":
+         return node["ipaddress"]
+   return "error"
+
+def SetHAPrimaryInConfig(connectiontype,nitroNSIP,authToken):
+   nitroPrimaryIP = GetHAPrimary(connectiontype,nitroNSIP,authToken)
+   if nitroPrimaryIP != "error":
+    f = fileinput.input(files=('/root/ns-letsencrypt/mynsconfig.py'), inplace=True, backup='.bak')
+    for line in f:
+     line = re.sub('nitroNSIP.+','nitroNSIP = "%s"' % nitroPrimaryIP, line.rstrip())
+     print(line)
+    f.close()
+
 authToken = getAuthCookie(connectiontype,nitroNSIP,nitroUser,nitroPass)
 if whattodo == "save":
    localcert = sys.argv[2]
@@ -281,6 +307,15 @@ elif whattodo == "clean":
        sys.exit("Invalid VIP Type.  Check config")  
    DeleterespPol(connectiontype,nitroNSIP,authToken,polname)
    DeleterespAct(connectiontype,nitroNSIP,authToken,actname)
+elif whattodo == "gethastatus":
+    response = GetHAStatus(connectiontype,nitroNSIP,authToken)
+    hastatus = response["hanode"]["hacurmasterstate"]
+    print("HA Status: %s" % hastatus)
+elif whattodo == "gethaprimary":
+    haprimary = GetHAPrimary(connectiontype,nitroNSIP,authToken)
+    print("HA Primary IP: %s" % haprimary)
+elif whattodo == "SetHAPrimaryInConfig":
+    SetHAPrimaryInConfig(connectiontype,nitroNSIP,authToken)
 elif whattodo == "saveconfig":
     print("Saving Netscaler Configuration")
     SaveNSConfig(connectiontype,nitroNSIP,authToken)
